@@ -1,0 +1,64 @@
+plugins {
+    id 'org.springframework.boot' version '4.1.1' apply false
+    id 'io.spring.dependency-management' version '1.1.7' apply false
+}
+
+allprojects {
+    group = 'com.barofit'
+    version = '0.0.1-SNAPSHOT'
+}
+
+subprojects {
+    apply plugin: 'java-library'
+    apply plugin: 'io.spring.dependency-management'
+    apply plugin: 'maven-publish'
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(21)
+        }
+    }
+
+    // 파라미터 이름 유지(@Query named parameter 등)
+    tasks.withType(JavaCompile).configureEach {
+        options.compilerArgs.add('-parameters')
+    }
+
+    repositories {
+        mavenCentral()
+    }
+
+    dependencyManagement {
+        imports {
+            mavenBom org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES
+        }
+    }
+
+    dependencies {
+        compileOnly 'org.projectlombok:lombok'
+        annotationProcessor 'org.projectlombok:lombok'
+        testCompileOnly 'org.projectlombok:lombok'
+        testAnnotationProcessor 'org.projectlombok:lombok'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+
+    tasks.named('test') {
+        useJUnitPlatform()
+    }
+
+    publishing {
+        publications {
+            mavenJava(MavenPublication) {
+                from components.java
+                artifactId = "barofit-${project.name}"
+            }
+        }
+        // 원격 퍼블리시(GitHub Packages 등)는 범위 밖 — CI/실배포 단계에서 repositories{} 추가 예정
+    }
+
+    // io.spring.dependency-management가 Spring Boot BOM으로 버전을 해소하는 방식이라
+    // Gradle Module Metadata 생성기가 "버전 없는 의존성"으로 오인해서 실패하는 것을 억제
+    tasks.withType(GenerateModuleMetadata).configureEach {
+        suppressedValidationErrors.add('dependencies-without-versions')
+    }
+}
