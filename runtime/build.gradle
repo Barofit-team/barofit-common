@@ -9,9 +9,19 @@ dependencies {
     runtimeOnly 'org.flywaydb:flyway-database-postgresql'
     runtimeOnly 'org.postgresql:postgresql'
 
-    // 서비스 레포들이 testImplementation으로 재사용하는 공통 Testcontainers 지원
+    // 서비스 레포들이 testImplementation으로 재사용하는 공통 Testcontainers/JWT 테스트 지원
     testFixturesApi 'org.springframework.boot:spring-boot-starter-test'
     testFixturesApi 'org.springframework.boot:spring-boot-testcontainers'
     testFixturesApi 'org.testcontainers:testcontainers-junit-jupiter'
     testFixturesApi 'org.testcontainers:testcontainers-postgresql'
+    testFixturesApi 'org.springframework.security:spring-security-oauth2-jose'
+
+    // 이 모듈 자신의 테스트(SecurityConfigTest)에서만 필요
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+}
+
+tasks.named('test') {
+    // BarofitTestPostgres(공유 Testcontainers 픽스처)가 요구하는 이미지 태그
+    jvmArgumentProviders.add(
+        { ["-Dbarofit.test.postgres-image=postgres:18.6"] } as CommandLineArgumentProvider)
 }
