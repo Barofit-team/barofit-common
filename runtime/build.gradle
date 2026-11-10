@@ -1,3 +1,5 @@
+apply plugin: 'java-test-fixtures'
+
 dependencies {
     api project(':common')
     api 'org.springframework.boot:spring-boot-starter-actuator'
@@ -6,4 +8,10 @@ dependencies {
     api 'org.flywaydb:flyway-core'
     runtimeOnly 'org.flywaydb:flyway-database-postgresql'
     runtimeOnly 'org.postgresql:postgresql'
+
+    // 서비스 레포들이 testImplementation으로 재사용하는 공통 Testcontainers 지원
+    testFixturesApi 'org.springframework.boot:spring-boot-starter-test'
+    testFixturesApi 'org.springframework.boot:spring-boot-testcontainers'
+    testFixturesApi 'org.testcontainers:testcontainers-junit-jupiter'
+    testFixturesApi 'org.testcontainers:testcontainers-postgresql'
 }
