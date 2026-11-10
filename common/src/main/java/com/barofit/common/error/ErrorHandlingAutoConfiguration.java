@@ -10,9 +10,9 @@ import org.springframework.context.annotation.Bean;
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class ErrorHandlingAutoConfiguration {
 
-	@Bean
-	@ConditionalOnMissingBean
-	GlobalExceptionHandler globalExceptionHandler() {
-		return new GlobalExceptionHandler();
-	}
+  @Bean
+  @ConditionalOnMissingBean
+  GlobalExceptionHandler globalExceptionHandler() {
+    return new GlobalExceptionHandler();
+  }
 }
