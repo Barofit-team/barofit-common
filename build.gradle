@@ -64,7 +64,16 @@ subprojects {
                 artifactId = "barofit-${project.name}"
             }
         }
-        // 원격 퍼블리시(GitHub Packages 등)는 범위 밖 — CI/실배포 단계에서 repositories{} 추가 예정
+        repositories {
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/Barofit-team/barofit-common")
+                credentials {
+                    username = System.getenv("GITHUB_ACTOR")
+                    password = System.getenv("GITHUB_TOKEN")
+                }
+            }
+        }
     }
 
     // io.spring.dependency-management가 Spring Boot BOM으로 버전을 해소하는 방식이라
