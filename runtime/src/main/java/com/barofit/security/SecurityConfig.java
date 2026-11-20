@@ -45,7 +45,7 @@ class SecurityConfig {
   private static final Duration CLOCK_SKEW = Duration.ofSeconds(60);
 
   private static final String[] INFRA_PUBLIC_PATHS = {
-    "/actuator/health", "/actuator/health/**", "/error", "/ws/coaching"
+    "/actuator/health", "/actuator/health/**", "/livez", "/readyz", "/error", "/ws/coaching"
   };
   private static final String[] DOCS_PUBLIC_PATHS = {
     "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**"
@@ -55,7 +55,8 @@ class SecurityConfig {
   SecurityFilterChain securityFilterChain(
       HttpSecurity http,
       JwtDecoder barofitJwtDecoder,
-      AuthenticationEntryPoint authenticationEntryPoint)
+      AuthenticationEntryPoint authenticationEntryPoint,
+      @Value("${management.server.port:-1}") int managementPort)
       throws Exception {
     http.cors(cors -> {})
         .csrf(csrf -> csrf.disable())
@@ -66,6 +67,14 @@ class SecurityConfig {
             session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(authorize ->
             authorize
+                .requestMatchers(request ->
+                    managementPort > 0
+                        && request.getLocalPort() == managementPort
+                        && request.getRequestURI().equals("/actuator/prometheus")
+                        && request.getMethod().equals("GET"))
+                .permitAll()
+                .requestMatchers("/actuator/prometheus", "/actuator/prometheus/**")
+                .denyAll()
                 .requestMatchers(AUTH_PUBLIC_PATHS)
                 .permitAll()
                 .requestMatchers(INFRA_PUBLIC_PATHS)
