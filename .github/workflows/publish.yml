@@ -39,3 +39,16 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash ./gradlew publish --no-daemon
+
+      - name: Notify MS repos to re-run CI with the new package
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.REPO_DISPATCH_TOKEN }}
+        run: |
+          set -euo pipefail
+          for repo in barofit-identity barofit-routine barofit-workout barofit-analytics barofit-report; do
+            echo "Dispatching common-published to ${repo}"
+            gh api "repos/Barofit-team/${repo}/dispatches" \
+              -f event_type='common-published' \
+              -f "client_payload[common_sha]=${GITHUB_SHA}"
+          done

@@ -28,9 +28,11 @@ barofit-common/
 ./gradlew build publishToMavenLocal
 ```
 
-> **현재 단계**: `mavenLocal()`(`~/.m2/repository`)로만 배포합니다. GitHub Packages 등 원격 저장소
-> 퍼블리시는 실 EKS/CI 구축 단계(다음 스프린트)에서 추가할 예정입니다. 그때까지 이 레포를 수정하면
-> **반드시 `publishToMavenLocal`을 다시 실행**해야 서비스 레포들이 최신 버전을 받습니다.
+> **배포 경로**: `dev`에 push되면 `.github/workflows/publish.yml`이 GitHub Packages
+> (`maven.pkg.github.com/Barofit-team/barofit-common`)에 자동 발행하고, 5개 서비스 레포에
+> `repository_dispatch`를 보내 각 레포의 CI를 새 버전으로 재실행시킵니다. 로컬 개발 중에는 여전히
+> `publishToMavenLocal`을 실행하면 서비스 레포가 그 로컬 빌드를 GitHub Packages보다 먼저 집어갑니다
+> (각 서비스 `build.gradle`의 `repositories`에 `mavenLocal()`이 `GitHubPackages`보다 앞에 있음).
 
 생성되는 좌표:
 
