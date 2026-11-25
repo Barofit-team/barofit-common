@@ -14,7 +14,7 @@ on:
         default: false
     secrets:
       REPO_DISPATCH_TOKEN:
-        required: false
+        required: true
 
 permissions:
   contents: read
