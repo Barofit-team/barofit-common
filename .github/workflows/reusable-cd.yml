@@ -1,0 +1,153 @@
+name: BaroFit Central Reusable CD
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: Backend service name
+        required: true
+        type: string
+      use_packages:
+        description: Build using GitHub Packages
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      REPO_DISPATCH_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+  packages: read
+  id-token: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    env:
+      SERVICE: ${{ inputs.service }}
+      USE_PACKAGES: ${{ inputs.use_packages }}
+
+    steps:
+      - name: Validate calling repository and service
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$SERVICE" in
+            identity|routine|workout|analytics|report) ;;
+            *) echo "Invalid service"; exit 1 ;;
+          esac
+          test "$GITHUB_REPOSITORY" = "Barofit-team/barofit-$SERVICE"
+
+      - name: Checkout service
+        uses: actions/checkout@v4
+
+      - name: Checkout common module
+        if: ${{ !inputs.use_packages }}
+        uses: actions/checkout@v4
+        with:
+          repository: Barofit-team/barofit-common
+          path: barofit-common
+
+      - name: Set up Java 21
+        if: ${{ !inputs.use_packages }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        if: ${{ !inputs.use_packages }}
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Publish common module locally
+        if: ${{ !inputs.use_packages }}
+        working-directory: barofit-common
+        run: ./gradlew publishToMavenLocal --no-daemon
+
+      - name: Prepare Docker Maven dependencies
+        if: ${{ !inputs.use_packages }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .m2-cache/com
+          cp -a "$HOME/.m2/repository/com/barofit" .m2-cache/com/
+
+      - name: Build Docker image
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "$USE_PACKAGES" = "true" ]; then
+            docker build --platform linux/amd64 \
+              --build-arg "GITHUB_ACTOR=$GITHUB_ACTOR" \
+              --secret id=github_token,env=GITHUB_TOKEN \
+              -t "barofit-${SERVICE}:ci" .
+          else
+            docker build --platform linux/amd64 \
+              -t "barofit-${SERVICE}:ci" .
+          fi
+
+      - name: Configure AWS OIDC credentials
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ECR_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: Login to Amazon ECR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Push Docker image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: push
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          EXPECTED="373514675861.dkr.ecr.ap-northeast-2.amazonaws.com"
+          test "$ECR_REGISTRY" = "$EXPECTED"
+
+          TAG="${GITHUB_SHA:0:7}"
+          IMAGE="$ECR_REGISTRY/barofit-${SERVICE}:$TAG"
+
+          docker tag "barofit-${SERVICE}:ci" "$IMAGE"
+          docker push "$IMAGE"
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Published: $IMAGE"
+
+      - name: Bump image tag in barofit-infra
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.REPO_DISPATCH_TOKEN }}
+          TAG: ${{ steps.push.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test -n "$TAG"
+
+          git clone --depth 1 --branch main \
+            "https://x-access-token:${GH_TOKEN}@github.com/Barofit-team/barofit-infra.git" infra-repo
+          cd infra-repo
+
+          yq -i ".${SERVICE}.image.tag = strenv(TAG)" infra/values-ecr-prod.yaml
+
+          if git diff --quiet; then
+            echo "Tag unchanged"
+            exit 0
+          fi
+
+          git config user.name "barofit-ci"
+          git config user.email "ci@barofit.local"
+          git add infra/values-ecr-prod.yaml
+          git commit -m "chore(cd): bump ${SERVICE} image tag to ${TAG}"
+          git push origin main
