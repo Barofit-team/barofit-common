@@ -7,12 +7,18 @@ on:
         description: Backend service name
         required: true
         type: string
+      use_packages:
+        description: Build using GitHub Packages
+        required: false
+        type: boolean
+        default: false
     secrets:
       REPO_DISPATCH_TOKEN:
         required: false
 
 permissions:
   contents: read
+  packages: read
   id-token: write
 
 jobs:
@@ -20,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SERVICE: ${{ inputs.service }}
+      USE_PACKAGES: ${{ inputs.use_packages }}
 
     steps:
       - name: Validate calling repository and service
@@ -36,25 +43,30 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Checkout common module
+        if: ${{ !inputs.use_packages }}
         uses: actions/checkout@v4
         with:
           repository: Barofit-team/barofit-common
           path: barofit-common
 
       - name: Set up Java 21
+        if: ${{ !inputs.use_packages }}
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Set up Gradle
+        if: ${{ !inputs.use_packages }}
         uses: gradle/actions/setup-gradle@v4
 
       - name: Publish common module locally
+        if: ${{ !inputs.use_packages }}
         working-directory: barofit-common
         run: ./gradlew publishToMavenLocal --no-daemon
 
       - name: Prepare Docker Maven dependencies
+        if: ${{ !inputs.use_packages }}
         shell: bash
         run: |
           set -euo pipefail
@@ -62,11 +74,22 @@ jobs:
           cp -a "$HOME/.m2/repository/com/barofit" .m2-cache/com/
 
       - name: Build Docker image
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_ACTOR: ${{ github.actor }}
         shell: bash
         run: |
           set -euo pipefail
-          docker build --platform linux/amd64 \
-            -t "barofit-${SERVICE}:ci" .
+
+          if [ "$USE_PACKAGES" = "true" ]; then
+            docker build --platform linux/amd64 \
+              --build-arg "GITHUB_ACTOR=$GITHUB_ACTOR" \
+              --secret id=github_token,env=GITHUB_TOKEN \
+              -t "barofit-${SERVICE}:ci" .
+          else
+            docker build --platform linux/amd64 \
+              -t "barofit-${SERVICE}:ci" .
+          fi
 
       - name: Configure AWS OIDC credentials
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
